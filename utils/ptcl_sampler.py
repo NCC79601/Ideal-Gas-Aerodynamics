@@ -17,6 +17,7 @@ def ptcl_sampler(
     map_size: Union[list, tuple],
     temperature: float,
     relative_mass: float,
+    max_velocity: float,
     flow_velocity: float = 0.0
 ) -> tuple:
     '''
@@ -27,6 +28,8 @@ def ptcl_sampler(
     - map_size: size of the map [w, h]
     - temperature: temperature of the system
     - relative_mass: relative mass of the particles
+    - max_velocity: maximum thermal velocity of the particles
+    - flow_velocity: velocity of the flow
 
     Returns:
     - `ptcl_pos, ptcl_v`: sampled positions and velocities
@@ -40,6 +43,7 @@ def ptcl_sampler(
     mass = relative_mass * m_1_12_C12
     scale = np.sqrt(k * temperature / mass)
     sampled_v = np.random.rayleigh(scale, ptcl_count)
+    sampled_v[sampled_v > max_velocity] = max_velocity
     sampled_angle = np.random.uniform(0, 2 * np.pi, ptcl_count)
     sampled_v_x = sampled_v * np.cos(sampled_angle) + flow_velocity
     sampled_v_y = sampled_v * np.sin(sampled_angle)
@@ -53,6 +57,7 @@ def ptcl_new_sampler(
     ptcl_gen_area_size: Union[list, tuple],
     temperature: float,
     mass: float,
+    max_velocity: float,
     flow_velocity: float = 0.0
 ) -> tuple:
     '''
@@ -63,11 +68,13 @@ def ptcl_new_sampler(
     - ptcl_gen_area_size: size of the area to generate particles [w, h]
     - temperature: temperature of the system
     - mass: mass of the particles
+    - max_velocity: maximum thermal velocity of the particles
+    - flow_velocity: velocity of the flow
 
     Returns:
     - `ptcl_new_pos, ptcl_new_v, t_to_enter`: sampled positions and velocities, and time for each particle to enter the map
     '''
-    ptcl_new_pos, ptcl_new_v = ptcl_sampler(ptcl_count, ptcl_gen_area_size, temperature, mass, flow_velocity)
+    ptcl_new_pos, ptcl_new_v = ptcl_sampler(ptcl_count, ptcl_gen_area_size, temperature, mass, max_velocity, flow_velocity)
     ptcl_new_pos -= ptcl_gen_area_size[0]
     t_to_enter = np.abs(ptcl_new_pos[:, 0]) / flow_velocity
 
