@@ -1,0 +1,12 @@
+{
+    "ptcl_radius": 0.2,
+    "ptcl_mass": 1,
+    "T0": 300,
+    "v0": 10,
+    "spatial_density": 0.05,
+    "map_size": [600, 900],
+    "ptcl_gen_area_size": [600, 900],
+    "walls": [],
+    "t_lim": 30,
+    "t_scale": 0.01667
+}

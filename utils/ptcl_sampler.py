@@ -1,0 +1,75 @@
+import json
+import numpy as np
+from typing import Union
+import os
+
+with open(os.path.join(os.path.dirname(__file__), 'constants.json'), 'r') as f:
+    constants = json.load(f)
+
+k = constants['k'] # Boltzmann constant
+
+def ptcl_sampler(
+    ptcl_count: int,
+    map_size: Union[list, tuple],
+    temperature: float,
+    mass: float,
+    flow_velocity: float = 0.0
+) -> tuple:
+    '''
+    function to sample particles, velocities from Maxwell-Boltzmann distribution, and positions from uniform distribution
+
+    Parameters:
+    - ptcl_count: number of particles to sample
+    - map_size: size of the map [w, h]
+    - temperature: temperature of the system
+    - mass: mass of the particles
+
+    Returns:
+    - `ptcl_pos, ptcl_v`: sampled positions and velocities
+    '''
+    # sample position
+    sampled_x = np.random.uniform(0, map_size[0], ptcl_count)
+    sampled_y = np.random.uniform(0, map_size[1], ptcl_count)
+    ptcl_pos = np.array([sampled_x, sampled_y]).T
+
+    # sample velocity from Maxwell-Boltzmann distribution
+    scale = np.sqrt(k * temperature / mass)
+    sampled_v = np.random.rayleigh(scale, ptcl_count)
+    sampled_angle = np.random.uniform(0, 2 * np.pi, ptcl_count)
+    sampled_v_x = sampled_v * np.cos(sampled_angle) + flow_velocity
+    sampled_v_y = sampled_v * np.sin(sampled_angle)
+    ptcl_v = np.array([sampled_v_x, sampled_v_y]).T
+
+    return ptcl_pos, ptcl_v
+
+
+def ptcl_new_sampler(
+    ptcl_count: int,
+    ptcl_gen_area_size: Union[list, tuple],
+    temperature: float,
+    mass: float,
+    flow_velocity: float = 0.0
+) -> tuple:
+    '''
+    function to generate new particles, using `ptcl_sampler` function
+
+    Parameters:
+    - ptcl_count: number of particles to sample
+    - ptcl_gen_area_size: size of the area to generate particles [w, h]
+    - temperature: temperature of the system
+    - mass: mass of the particles
+
+    Returns:
+    - `ptcl_new_pos, ptcl_new_v, t_to_enter`: sampled positions and velocities, and time for each particle to enter the map
+    '''
+    ptcl_new_pos, ptcl_new_v = ptcl_sampler(ptcl_count, ptcl_gen_area_size, temperature, mass, flow_velocity)
+    ptcl_new_pos -= ptcl_gen_area_size[0]
+    t_to_enter = np.abs(ptcl_new_pos[:, 0]) / flow_velocity
+
+    # sort particles by time to enter
+    sorted_indices = np.argsort(t_to_enter)
+    ptcl_new_pos = ptcl_new_pos[sorted_indices]
+    ptcl_new_v = ptcl_new_v[sorted_indices]
+    t_to_enter = t_to_enter[sorted_indices]
+    
+    return ptcl_new_pos, ptcl_new_v, t_to_enter
