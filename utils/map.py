@@ -64,7 +64,7 @@ class Map:
 
         # initialize collision detection
         self.ptcl_collide_t = np.ones(ptcl_count) * np.inf # collision time
-        self.ptcl_collide_id = np.zeros(ptcl_count) # negative id for wall collision
+        self.ptcl_collide_id = np.zeros(ptcl_count, dtype=int) # negative id for wall collision
 
         # initialize current simulation time
         self.t = 0
@@ -73,7 +73,8 @@ class Map:
         self.t_last_recorded = 0
 
         # initialize collision predictions
-        for i in range(len(self.ptcl_pos)):
+        print('Comupting initial collision predictions...')
+        for i in tqdm(range(len(self.ptcl_pos))):
             self._update_collision_predictions(i)
 
         # initialize key frames
@@ -89,25 +90,6 @@ class Map:
         '''
         self.ptcl_pos += self.ptcl_v * elapsed_time
         self.ptcl_pos[:, 1] = self.ptcl_pos[:, 1] % self.map_size[1]
-        
-        # delete particles outside the map
-        remove_ids = np.where(self.ptcl_pos[:, 0] > self.map_size[0])[0]
-        # reget collision predictions, for some original collision predictions are invalid
-        needs_update_ids = np.zeros(len(self.ptcl_pos), dtype=bool)
-        needs_update_ids[remove_ids] = True
-
-        self.ptcl_pos = np.delete(self.ptcl_pos, remove_ids, axis=0)
-        self.ptcl_v   = np.delete(self.ptcl_v, remove_ids, axis=0)
-        self.ptcl_collide_t  = np.delete(self.ptcl_collide_t, remove_ids)
-        self.ptcl_collide_id = np.delete(self.ptcl_collide_id, remove_ids)
-        needs_update_ids = np.delete(needs_update_ids, remove_ids)
-
-        # update collision predictions for particles that are not removed
-        for i in range(len(self.ptcl_pos)):
-            if needs_update_ids[i]:
-                self._update_collision_predictions(i)
-        self.next_ptcl_collide_t = np.min(self.ptcl_collide_t)
-        self.next_ptcl_collide_id = np.argmin(self.ptcl_collide_t)
     
     def _get_positions(self, t: float) -> np.ndarray:
         '''
@@ -163,8 +145,8 @@ class Map:
                 self.ptcl_radius
             )
             if is_collide:
-                self._update_specific_collision_prediciton(ptcl_id, t, i + 1)
-                self._update_specific_collision_prediciton(i, t, ptcl_id + 1)
+                self._update_specific_collision_prediciton(ptcl_id, self.t + t, i + 1)
+                self._update_specific_collision_prediciton(i, self.t + t, ptcl_id + 1)
         
         # update particle-wall collisions
         for i, wall in enumerate(self.walls):
@@ -174,7 +156,7 @@ class Map:
                 self.ptcl_radius
             )
             if is_collide:
-                self._update_specific_collision_prediciton(ptcl_id, t, -i - 1)
+                self._update_specific_collision_prediciton(ptcl_id, self.t + t, -i - 1)
 
     def _collide_particle_particle(self, ptcl_id1: int, ptcl_id2: int) -> None:
         '''
@@ -215,7 +197,7 @@ class Map:
         '''
         Refresh particle generation area
         '''
-        ptcl_new_count = self.spatial_density * self.ptcl_gen_area_size[0] * self.ptcl_gen_area_size[1]
+        ptcl_new_count = int(self.spatial_density * self.ptcl_gen_area_size[0] * self.ptcl_gen_area_size[1])
         self.ptcl_new_pos, self.ptcl_new_v, self.t_to_enter = \
             ptcl_new_sampler(ptcl_new_count, self.ptcl_gen_area_size, self.T0, self.ptcl_relative_mass, self.v0)
         self.t_enter = self.t + self.t_to_enter
@@ -272,12 +254,6 @@ class Map:
         else:
             sim_next_state = 'gen'
             next_t = self.next_gen_t
-        
-        print(f'size of ptcl_pos: {self.ptcl_pos.shape}, size of ptcl_v: {self.ptcl_v.shape}')
-
-        with open('ptcl_collide_t.txt', 'w') as f:
-            f.write(str(self.ptcl_collide_t.tolist()))
-        print('initial ptcl_collide_t saved.')
 
         # simulation loop (finite state machine)
         print('Running simulation...')
@@ -324,7 +300,10 @@ class Map:
                     self.ptcl_new_v[self.next_enter_id]
                 )
                 self._update_collision_predictions(len(self.ptcl_pos) - 1)
-                next_enter_t = self.t_enter[self.next_enter_id]
+                if self.next_enter_id + 1 == len(self.t_enter):
+                    next_enter_t = np.inf
+                else:
+                    next_enter_t = self.t_enter[self.next_enter_id]
                 # update collision prediction of the newly entered particle
                 self.next_enter_id += 1
             elif sim_next_state == 'gen':

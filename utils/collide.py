@@ -14,7 +14,7 @@ def is_collide_ptcl_ptcl(pos1, v1, pos2, v2, r) -> tuple:
     - r: radius of the particles
 
     Returns:
-    - (is_collide, t): whether the particles collide or not, and the collision time
+    - (is_collide, t): whether the particles collide or not, and the time to collision if they  
     '''
     x1, y1 = pos1[0], pos1[1]
     x2, y2 = pos2[0], pos2[1]
@@ -36,7 +36,7 @@ def is_collide_ptcl_ptcl(pos1, v1, pos2, v2, r) -> tuple:
 
 def is_collide_ptcl_wall(pos, v, point1, point2, r) -> tuple:
     '''
-    Judge whether a particle collide with a wall or not, and return the collision time if they collide
+    Judge whether a particle collide with a wall or not, and return the time to collision time if they collide
 
     Parameters:
     - pos: position of the particle
@@ -64,7 +64,11 @@ def is_collide_ptcl_wall(pos, v, point1, point2, r) -> tuple:
     C = x2 * y1 - x1 * y2
     # compute collision time
     t = (-r * np.sqrt(A**2 + B**2) - (A * x + B * y + C)) / (A * vx + B * vy)
-    return True, t
+    collide_pos = pos + t * v
+    # check if the particle collide within the segment
+    if np.dot(collide_pos - point1, collide_pos - point2) <= 0:
+        return True, t
+    return False, None
 
 
 def collide_particle_particle(p1, v1, p2, v2) -> None:
@@ -100,9 +104,9 @@ def collide_particle_wall(v, point1, point2) -> None:
     - new velocity of the particle after collision
     '''
     # compute normal vector of the wall
-    x1, y1 = point1[0], point1[1]
-    x2, y2 = point2[0], point2[1]
-    n = np.array([y1 - y2, x2 - x1])
+    x1, y1 = float(point1[0]), float(point1[1])
+    x2, y2 = float(point2[0]), float(point2[1])
+    n = np.array([y1 - y2, x2 - x1], dtype=float)
     n /= np.linalg.norm(n)
 
     # compute new velocity

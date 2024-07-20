@@ -4,7 +4,7 @@ from tqdm import tqdm
 import os
 import subprocess
 
-def make_video(keyframes, width, height, ptcl_radius, output_filename='output.mp4', temp_folder='temp_frames'):
+def make_video(keyframes, width, height, walls, ptcl_radius, output_filename='output.mp4', temp_folder='temp_frames'):
     # 确保临时文件夹存在
     if not os.path.exists(temp_folder):
         os.makedirs(temp_folder)
@@ -31,6 +31,9 @@ def make_video(keyframes, width, height, ptcl_radius, output_filename='output.mp
             left_up = (pos[0] - ptcl_radius, pos[1] - ptcl_radius)
             right_down = (pos[0] + ptcl_radius, pos[1] + ptcl_radius)
             draw.ellipse([left_up, right_down], fill='black')
+        
+        for wall in walls:
+            draw.line([*wall[0], *wall[1]], fill='black', width=2)
         
         # 反转y轴
         img = img.transpose(Image.FLIP_TOP_BOTTOM)

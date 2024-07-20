@@ -9,5 +9,5 @@ print('Simulation complete.')
 
 keyframes = mp.key_frames
 
-make_video(keyframes, mp.width, mp.height, mp.ptcl_radius, output_filename='output.mp4')
+make_video(keyframes, mp.width, mp.height, mp.walls, mp.ptcl_radius, output_filename='output.mp4')
 
