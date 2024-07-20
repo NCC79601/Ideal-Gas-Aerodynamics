@@ -178,7 +178,6 @@ class Map:
         self._update_collision_predictions(ptcl_id2)
         # print(f' > after update, ptcl_id1 collide id: {self.ptcl_collide_id[ptcl_id1]}, ptcl_id2 collide id: {self.ptcl_collide_id[ptcl_id2]}')
 
-    
     def _collide_particle_wall(self, ptcl_id: int, wall_id: int) -> None:
         '''
         Perform collision between particle `ptcl_id` and wall `wall_id`
