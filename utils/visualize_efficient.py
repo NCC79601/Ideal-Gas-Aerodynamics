@@ -1,24 +1,20 @@
-from moviepy.editor import ImageSequenceClip
+from PIL import Image, ImageDraw
 import numpy as np
-import matplotlib.pyplot as plt
 from tqdm import tqdm
+import os
+import subprocess
 
-def make_video(keyframes, width, height, ptcl_radius, output_filename='output.mp4'):
-    # Set the size of the canvas
-    fig, ax = plt.subplots(figsize=(width / 100, height / 100), dpi=100)
-    ax.set_xlim(0, width)
-    ax.set_ylim(0, height)
-    ax.set_aspect('equal')
+def make_video(keyframes, width, height, ptcl_radius, output_filename='output.mp4', temp_folder='temp_frames'):
+    # 确保临时文件夹存在
+    if not os.path.exists(temp_folder):
+        os.makedirs(temp_folder)
     
-    # Get all the time points
+    # 获取所有时间点
     times = [kf['t'] for kf in keyframes]
     min_time, max_time = min(times), max(times)
-    fps = 60  # Set the frame rate
+    fps = 24  # 设置帧率
     duration = max_time - min_time
     total_frames = int(duration * fps) + 1
-
-    # Create a list of frames
-    frames = []
 
     print('Generating video frames...')
 
@@ -26,26 +22,33 @@ def make_video(keyframes, width, height, ptcl_radius, output_filename='output.mp
         t = min_time + frame_idx / fps
         closest_keyframe = min(keyframes, key=lambda kf: abs(kf['t'] - t))
         
-        ax.clear()
-        ax.set_xlim(0, width)
-        ax.set_ylim(0, height)
+        # 创建新图像
+        img = Image.new('RGB', (width, height), 'white')
+        draw = ImageDraw.Draw(img)
         
+        # 绘制粒子
         for pos in closest_keyframe['ptcl_pos']:
-            circle = plt.Circle(pos, ptcl_radius, color='black')
-            ax.add_patch(circle)
+            left_up = (pos[0] - ptcl_radius, pos[1] - ptcl_radius)
+            right_down = (pos[0] + ptcl_radius, pos[1] + ptcl_radius)
+            draw.ellipse([left_up, right_down], fill='black')
         
-        fig.canvas.draw()
+        # 反转y轴
+        img = img.transpose(Image.FLIP_TOP_BOTTOM)
         
-        # Add the current frame to the list of frames
-        image = np.frombuffer(fig.canvas.tostring_rgb(), dtype='uint8')
-        image = image.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-        frames.append(image)
-
-    plt.close(fig)
+        # 保存帧到临时文件夹
+        frame_filename = os.path.join(temp_folder, f'frame_{frame_idx:04d}.png')
+        img.save(frame_filename)
     
-    # Use moviepy to combine the list of frames into a video
-    clip = ImageSequenceClip(frames, fps=fps)
-    clip.write_videofile(output_filename, codec='libx264')
+    # 使用ffmpeg合并图像为视频
+    ffmpeg_cmd = f'ffmpeg -r {fps} -i {temp_folder}/frame_%04d.png -vcodec libx264 -crf 25 -pix_fmt yuv420p {output_filename}'
+    subprocess.run(ffmpeg_cmd, shell=True)
+    
+    # 清理临时文件
+    for file_name in os.listdir(temp_folder):
+        os.remove(os.path.join(temp_folder, file_name))
+    os.rmdir(temp_folder)
+
+    print(f'Video saved as {output_filename}')
 
 
 if __name__ == '__main__':

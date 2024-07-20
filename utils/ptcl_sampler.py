@@ -2,17 +2,21 @@ import json
 import numpy as np
 from typing import Union
 import os
+import torch
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 with open(os.path.join(os.path.dirname(__file__), 'constants.json'), 'r') as f:
     constants = json.load(f)
 
 k = constants['k'] # Boltzmann constant
+m_1_12_C12 = constants['m_1_12_C12'] # mass of 1/12 of C12
 
 def ptcl_sampler(
     ptcl_count: int,
     map_size: Union[list, tuple],
     temperature: float,
-    mass: float,
+    relative_mass: float,
     flow_velocity: float = 0.0
 ) -> tuple:
     '''
@@ -22,7 +26,7 @@ def ptcl_sampler(
     - ptcl_count: number of particles to sample
     - map_size: size of the map [w, h]
     - temperature: temperature of the system
-    - mass: mass of the particles
+    - relative_mass: relative mass of the particles
 
     Returns:
     - `ptcl_pos, ptcl_v`: sampled positions and velocities
@@ -33,6 +37,7 @@ def ptcl_sampler(
     ptcl_pos = np.array([sampled_x, sampled_y]).T
 
     # sample velocity from Maxwell-Boltzmann distribution
+    mass = relative_mass * m_1_12_C12
     scale = np.sqrt(k * temperature / mass)
     sampled_v = np.random.rayleigh(scale, ptcl_count)
     sampled_angle = np.random.uniform(0, 2 * np.pi, ptcl_count)
