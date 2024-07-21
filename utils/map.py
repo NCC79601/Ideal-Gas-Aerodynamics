@@ -34,52 +34,59 @@ class Map:
         with open(config_file_path, 'r') as f:
             config = json.load(f)
         
-        # parse config
-        self.ptcl_radius = config['ptcl_radius'] # particle radius
+        # parse config file
+        # particle properties
+        self.ptcl_radius        = config['ptcl_radius'] # particle radius
         self.ptcl_relative_mass = config['ptcl_relative_mass'] # relative mass of the particles
-        self.T0 = config['T0'] # static temperature
-        self.v0 = config['v0'] # flowing velocity
-        self.spatial_density = config['spatial_density'] # spatial density (number of particles per unit area)+
-        +.3
-        self.map_size = config['map_size'] # map size [w, h]
+        # thermal properties
+        self.T0              = config['T0'] # static temperature
+        self.v0              = config['v0'] # flowing velocity
+        self.v_max           = config['v_max'] # maximum velocity
+        self.spatial_density = config['spatial_density'] # spatial density (number of particles per unit area)
+        # spatial geometric properties
+        self.map_size           = config['map_size'] # map size [w, h]
         self.width, self.height = self.map_size[0], self.map_size[1]
         self.ptcl_gen_area_size = config['ptcl_gen_area_size'] # particle generation area size [w, h]
-        self.walls = config['walls'] # walls in the map [[[x1, y1], [x2, y2]], ...]
-        self.t_lim = config['t_lim'] # simulation time limit
+        self.ptcl_gen_y_range   = config['ptcl_gen_y_range'] # particle generation y range [y_min, y_max]
+        self.walls              = config['walls'] # walls in the map [[[x1, y1], [x2, y2]], ...]
+        # simulation time properties
+        self.t_lim   = config['t_lim'] # simulation time limit
         self.t_scale = config['t_scale'] # time between frames (default 1/60 s)
-
-        # initialize particles
-        ptcl_count = int(self.spatial_density * self.map_size[0] * self.map_size[1])
-        print(f'Initializing map [{self.map_size[0]} x {self.map_size[1]}] with {ptcl_count} particles...')
-        self.ptcl_pos, self.ptcl_v = ptcl_sampler(ptcl_count, self.map_size, self.T0, self.ptcl_relative_mass, self.v0)
-        
-        # initialize particle generation area
-        ptcl_new_count = int(self.spatial_density * self.ptcl_gen_area_size[0] * self.ptcl_gen_area_size[1])
-        self.ptcl_new_pos, self.ptcl_new_v, self.t_to_enter = \
-            ptcl_new_sampler(ptcl_new_count, self.ptcl_gen_area_size, self.T0, self.ptcl_relative_mass, self.v0)
-        self.t_enter = self.t_to_enter
-        self.next_enter_id = 0
-        self.gen_area_refresh_interval = self.ptcl_gen_area_size[0] / self.v0 # time interval to refresh particle generation area
-        self.next_gen_t = self.gen_area_refresh_interval # next time to refresh particle generation area
-
-        # initialize collision detection
-        self.ptcl_collide_t = np.ones(ptcl_count) * np.inf # collision time
-        self.ptcl_collide_id = np.zeros(ptcl_count, dtype=int) # negative id for wall collision
+        self.dt      = config['dt'] # time step
 
         # initialize current simulation time
         self.t = 0
 
-        # initialize last recorded time
-        self.t_last_recorded = 0
-
-        # initialize collision predictions
-        print('Comupting initial collision predictions...')
-        for i in tqdm(range(len(self.ptcl_pos))):
-            self._update_collision_predictions(i)
+        # initialize particles
+        self.ptcl_count = int(self.spatial_density * self.map_size[0] * \
+                              (self.ptcl_gen_y_range[1] - self.ptcl_gen_y_range[0]))
+        print(f'Initializing map [{self.map_size[0]} x {self.map_size[1]}] with {self.ptcl_count} particles...')
+        self.ptcl_pos, self.ptcl_v = ptcl_sampler(
+            ptcl_count    = self.ptcl_count,
+            map_size = [self.map_size[0], self.ptcl_gen_y_range[1] - self.ptcl_gen_y_range[0]],
+            temperature   = self.T0,
+            max_velocity  = self.v_max,
+            relative_mass = self.ptcl_relative_mass,
+            flow_velocity = self.v0
+        )
+        print(f'Particles sampled.')
+        self.ptcl_pos[:, 1] += self.ptcl_gen_y_range[0] # shift particles to the correct y range
+        # convert to torch tensor (use cuda if available)
+        self.ptcl_pos = torch.tensor(self.ptcl_pos, dtype=torch.float32, device=device).detach() # no need for gradients
+        self.ptcl_v   = torch.tensor(self.ptcl_v,   dtype=torch.float32, device=device).detach()
+        
+        # initialize particle generation area (refreshed in fixed time interval)
+        self.ptcl_gen_count = int(self.spatial_density * self.ptcl_gen_area_size[0] * \
+                                  (self.ptcl_gen_y_range[1] - self.ptcl_gen_y_range[0]))
+        self._refresh_ptcl_gen_area() # fill the area with new generated particles
+        print(f'Initial particle generation area created.')
+        self.gen_area_refresh_interval = self.ptcl_gen_area_size[0] / self.v0 # time interval to refresh
+        self.next_gen_t = self.gen_area_refresh_interval # next time to refresh
 
         # initialize key frames
-        self.key_frames = [] # [{"t": t, "ptcl_pos": ptcl_pos, "ptcl_v": ptcl_v}, ...]
-        print('Map initialized.')
+        self.keyframes = [] # [{"t": t, "ptcl_pos": ptcl_pos, "ptcl_v": ptcl_v}, ...]
+
+        print('Map initialization complete.')
 
     def _update_positions(self, elapsed_time: float) -> None:
         '''
@@ -89,238 +96,169 @@ class Map:
         - elapsed_time: elapsed time of this update (usually till the next predicted collision)
         '''
         self.ptcl_pos += self.ptcl_v * elapsed_time
-        self.ptcl_pos[:, 1] = self.ptcl_pos[:, 1] % self.map_size[1]
     
-    def _get_positions(self, t: float) -> np.ndarray:
-        '''
-        Get particle positions
-
-        Parameters:
-        - t: specified time
-
-        Returns:
-        - particle positions at time `t`
-        '''
-        return self.ptcl_pos + self.ptcl_v * (t - self.t)
-
-    def _update_specific_collision_prediciton(self, ptcl_id: int, collide_t: float, ptcl_collide_id: int) -> None:
-        '''
-        Single-point collision prediction update for specific particle
-        
-        ** Does not need to be called explicitly **
-
-        Parameters:
-        - ptcl_id: id of particle to update (index from 1, to avoid ambiguity)
-        - collide_t: collision time
-        - ptcl_collide_id: collision id (negative for wall collision)
-
-        Return:
-        - True if collision time is updated, False otherwise
-        '''
-        if collide_t <= self.t:
-            return False
-        if collide_t < self.ptcl_collide_t[ptcl_id]:
-            self.ptcl_collide_t[ptcl_id] = collide_t
-            self.ptcl_collide_id[ptcl_id] = ptcl_collide_id
-            return True
-        return False
-
-    def _update_collision_predictions(self, ptcl_id: int) -> None:
-        '''
-        Update collision predictions for particle `ptcl_id`
-        
-        ** Does not need to be called explicitly **
-
-        Parameters:
-        - ptcl_id: id of the particle to update (index from 0)
-        '''
-        # clear original collision predictions
-        self.ptcl_collide_t[ptcl_id] = np.inf
-
-        # update particle-particle collisions
-        for i in range(len(self.ptcl_pos)):
-            is_collide, t = is_collide_ptcl_ptcl(
-                self.ptcl_pos[ptcl_id, :], self.ptcl_v[ptcl_id, :],
-                self.ptcl_pos[i, :], self.ptcl_v[i, :],
-                self.ptcl_radius
-            )
-            if is_collide:
-                self._update_specific_collision_prediciton(ptcl_id, self.t + t, i + 1)
-                self._update_specific_collision_prediciton(i, self.t + t, ptcl_id + 1)
-        
-        # update particle-wall collisions
-        for i, wall in enumerate(self.walls):
-            is_collide, t = is_collide_ptcl_wall(
-                self.ptcl_pos[ptcl_id, :], self.ptcl_v[ptcl_id, :],
-                wall[0], wall[1],
-                self.ptcl_radius
-            )
-            if is_collide:
-                self._update_specific_collision_prediciton(ptcl_id, self.t + t, -i - 1)
-
-    def _collide_particle_particle(self, ptcl_id1: int, ptcl_id2: int) -> None:
-        '''
-        Perform collision between particles
-
-        Parameters:
-        - ptcl_id1: id of the first particle
-        - ptcl_id2: id of the second particle
-        '''
-        # print(f' > Colliding particle {ptcl_id1} and particle {ptcl_id2}')
-        # print(f' > before collision: ptcl_v1: {self.ptcl_v[ptcl_id1]}, ptcl_v2: {self.ptcl_v[ptcl_id2]}')
-        self.ptcl_v[ptcl_id1], self.ptcl_v[ptcl_id2] = collide_particle_particle(
-            self.ptcl_pos[ptcl_id1, :], self.ptcl_v[ptcl_id1, :],
-            self.ptcl_pos[ptcl_id2, :], self.ptcl_v[ptcl_id2, :]
-        )
-        # print(f' > after collision: ptcl_v1: {self.ptcl_v[ptcl_id1]}, ptcl_v2: {self.ptcl_v[ptcl_id2]}')
-        # print(f' > before update, ptcl_id1 collide id: {self.ptcl_collide_id[ptcl_id1]}, ptcl_id2 collide id: {self.ptcl_collide_id[ptcl_id2]}')
-        self._update_collision_predictions(ptcl_id1)
-        self._update_collision_predictions(ptcl_id2)
-        # print(f' > after update, ptcl_id1 collide id: {self.ptcl_collide_id[ptcl_id1]}, ptcl_id2 collide id: {self.ptcl_collide_id[ptcl_id2]}')
-
-    def _collide_particle_wall(self, ptcl_id: int, wall_id: int) -> None:
-        '''
-        Perform collision between particle `ptcl_id` and wall `wall_id`
-
-        Parameters:
-        - ptcl_id: id of the particle
-        - wall_id: id of the wall
-        '''
-        self.ptcl_v[ptcl_id, :] = collide_particle_wall(
-            self.ptcl_v[ptcl_id, :],
-            self.walls[wall_id][0], self.walls[wall_id][1]
-        )
-        self._update_collision_predictions(ptcl_id)
-
     def _refresh_ptcl_gen_area(self) -> None:
         '''
         Refresh particle generation area
         '''
-        ptcl_new_count = int(self.spatial_density * self.ptcl_gen_area_size[0] * self.ptcl_gen_area_size[1])
-        self.ptcl_new_pos, self.ptcl_new_v, self.t_to_enter = \
-            ptcl_new_sampler(ptcl_new_count, self.ptcl_gen_area_size, self.T0, self.ptcl_relative_mass, self.v0)
-        self.t_enter = self.t + self.t_to_enter
+        self.ptcl_new_pos, self.ptcl_new_v, self.ptcl_new_t_to_enter = ptcl_new_sampler(
+            ptcl_count    = self.ptcl_gen_count,
+            ptcl_gen_area_size = [self.ptcl_gen_area_size[0], self.ptcl_gen_y_range[1] - self.ptcl_gen_y_range[0]],
+            temperature   = self.T0,
+            relative_mass = self.ptcl_relative_mass,
+            max_velocity  = self.v_max,
+            flow_velocity = self.v0
+        )
+        self.ptcl_new_pos = torch.tensor(self.ptcl_new_pos, dtype=torch.float32, device=device)
+        self.ptcl_new_pos[:, 1] += self.ptcl_gen_y_range[0] # shift particles to the correct y range
+        self.ptcl_new_v = torch.tensor(self.ptcl_new_v, dtype=torch.float32, device=device)
+        self.ptcl_new_t_enter = self.ptcl_new_t_to_enter + self.t
         self.next_enter_id = 0
-        self.next_gen_t = self.t + self.gen_area_refresh_interval
 
-    def _append_new_particle(self, ptcl_pos: np.ndarray, ptcl_v: np.ndarray) -> None:
-        '''
-        Append new particles to the map
-
-        Parameters:
-        - ptcl_pos: new particle positions
-        - ptcl_v: new particle velocities
-        '''
-        self.ptcl_pos = np.vstack([self.ptcl_pos, ptcl_pos])
-        self.ptcl_v   = np.vstack([self.ptcl_v, ptcl_v])
-        self.ptcl_collide_t  = np.append(self.ptcl_collide_t, np.inf)
-        self.ptcl_collide_id = np.append(self.ptcl_collide_id, 0)
-
-    def simulate(self):
+    def simulate(self) -> None:
         '''
         Perform simulation
         '''
-        # record the first frame
-        self.key_frames.append({
-            "t": 0,
-            "ptcl_pos": self.ptcl_pos,
-            "ptcl_v": self.ptcl_v,
-            "ptcl_collide_t": self.ptcl_collide_t,
+        # record first keyframe
+        self.keyframes.append({
+            "t": self.t,
+            "ptcl_pos": self.ptcl_pos.cpu().numpy(),
+            "ptcl_v": self.ptcl_v.cpu().numpy()
         })
 
-        # next state of simulation FSM
-        sim_next_state = ''
-
-        # calculate the next collision time
-        self.next_ptcl_collide_t  = np.min(self.ptcl_collide_t)
-        self.next_ptcl_collide_id = np.argmin(self.ptcl_collide_t)
-
-        # calculate the next new particle enter time
-        next_enter_t = self.t_enter[self.next_enter_id]
-
-        self.next_gen_t
-
-        # next simulation state time
-        next_t = 0
-
-        # construct next state of simulation FSM
-        if self.next_ptcl_collide_t < next_enter_t and self.next_ptcl_collide_t < self.next_gen_t:
-            sim_next_state = 'collide'
-            next_t = self.next_ptcl_collide_t
-        elif next_enter_t < self.next_ptcl_collide_t and next_enter_t < self.next_gen_t:
-            sim_next_state = 'enter'
-            next_t = next_enter_t
-        else:
-            sim_next_state = 'gen'
-            next_t = self.next_gen_t
-
-        # simulation loop (finite state machine)
-        print('Running simulation...')
-
+        # simulation loop
         pbar = tqdm(total=self.t_lim)
-        
         while self.t < self.t_lim:
-            # print(f'Simulation time: {self.t} s, next state: {sim_next_state}, next time: {next_t} s')
-            # FIXME:
-            # record key frames
-            while next_t - self.t_last_recorded >= self.t_scale:
-                self.key_frames.append({
-                    "t": self.t_last_recorded + self.t_scale,
-                    "ptcl_pos": self._get_positions(self.t_last_recorded + self.t_scale),
-                    "ptcl_v": self.ptcl_v,
+            # record keyframes
+            if self.t - self.keyframes[-1]['t'] >= self.t_scale:
+                self.keyframes.append({
+                    "t": self.t,
+                    "ptcl_pos": self.ptcl_pos.cpu().numpy(),
+                    "ptcl_v": self.ptcl_v.cpu().numpy()
                 })
-                self.t_last_recorded = self.t_last_recorded + self.t_scale
-
-            # update positions
-            self._update_positions(next_t - self.t)
             
-            # update simulation time
-            self.t = next_t
-
-            if sim_next_state == 'collide':
-                # perform collision
-                # HACK: should not!
-                if self.ptcl_collide_id[self.next_ptcl_collide_id] < 0:
-                    # particle - wall collision
-                    self._collide_particle_wall(self.next_ptcl_collide_id, -int(self.ptcl_collide_id[self.next_ptcl_collide_id]) - 1)
-                    self.next_ptcl_collide_t = np.min(self.ptcl_collide_t)
-                    self.next_ptcl_collide_id = np.argmin(self.ptcl_collide_t)
-                else:
-                    # particle - particle collision
-                    self._collide_particle_particle(self.next_ptcl_collide_id, int(self.ptcl_collide_id[self.next_ptcl_collide_id]) - 1)
-                    self.next_ptcl_collide_t = np.min(self.ptcl_collide_t)
-                    self.next_ptcl_collide_id = np.argmin(self.ptcl_collide_t)
-                    # print(f'particle {next_ptcl_collide_id} collided with particle {int(self.ptcl_collide_id[next_ptcl_collide_id]) - 1}')
-                    # print(f'next_ptcl_collide_t: {next_ptcl_collide_t}, next_ptcl_collide_id: {next_ptcl_collide_id}')
-            elif sim_next_state == 'enter':
-                # append new particles
-                self._append_new_particle(
-                    self.ptcl_new_pos[self.next_enter_id],
-                    self.ptcl_new_v[self.next_enter_id]
-                )
-                self._update_collision_predictions(len(self.ptcl_pos) - 1)
-                if self.next_enter_id + 1 == len(self.t_enter):
-                    next_enter_t = np.inf
-                else:
-                    next_enter_t = self.t_enter[self.next_enter_id]
-                # update collision prediction of the newly entered particle
-                self.next_enter_id += 1
-            elif sim_next_state == 'gen':
-                # refresh particle generation area
+            # check if need to refresh particle generation area
+            if self.t >= self.next_gen_t:
                 self._refresh_ptcl_gen_area()
+                self.next_gen_t += self.gen_area_refresh_interval
+                print(f'Particle generation area refreshed @ t = {self.t:.2f}.')
             
-            # refresh next state
-            if self.next_ptcl_collide_t < next_enter_t and self.next_ptcl_collide_t < self.next_gen_t:
-                sim_next_state = 'collide'
-                next_t = self.next_ptcl_collide_t
-            elif next_enter_t < self.next_ptcl_collide_t and next_enter_t < self.next_gen_t:
-                sim_next_state = 'enter'
-                next_t = next_enter_t
-            else:
-                sim_next_state = 'gen'
-                next_t = self.next_gen_t
+            # check if new particles enter the map
+            while self.next_enter_id < len(self.ptcl_new_t_enter) and self.ptcl_new_t_enter[self.next_enter_id] <= self.t:
+                gen_ptcl_pos = self.ptcl_new_pos[self.next_enter_id]
+                gen_ptcl_pos[0] = 0 # enter from left boundary
+                self.ptcl_pos = torch.cat([
+                    self.ptcl_pos,
+                    gen_ptcl_pos.unsqueeze(0).to(device)
+                ], dim=0)
+                self.ptcl_v = torch.cat([
+                    self.ptcl_v,
+                    self.ptcl_new_v[self.next_enter_id].unsqueeze(0).to(device)
+                ], dim=0)
+                self.next_enter_id += 1
             
-            # update simulation time
-            pbar.update(next_t - self.t)
+            # step forward time
+            self.t += self.dt
+            pbar.update(self.dt)
+            
+            # update particle positions
+            self._update_positions(self.dt)
+
+            # check for particles out of map range
+            out_of_range  = self.ptcl_pos[:, 0] > self.map_size[0]
+            self.ptcl_pos = self.ptcl_pos[~out_of_range]
+            self.ptcl_v   = self.ptcl_v[~out_of_range]
+
+            # check for collisions
+            # particle-particle collisions
+            for i in range(1, self.ptcl_pos.shape[0], 1):
+                pos  = self.ptcl_pos[i, :].unsqueeze(0)
+                other_ptcl_pos = self.ptcl_pos[:i, :]
+                dis2 = torch.sum((other_ptcl_pos - pos) ** 2, dim=1)
                 
+                collide_id = torch.argmin(dis2)
+
+                if dis2[collide_id] > 4 * self.ptcl_radius ** 2:
+                    # no collision for particle i
+                    continue
+
+                # handle collision
+                p1 = pos.squeeze(0).cpu().numpy()
+                v1 = self.ptcl_v[i, :].cpu().numpy()
+                p2 = self.ptcl_pos[collide_id, :].cpu().numpy()
+                v2 = self.ptcl_v[collide_id, :].cpu().numpy()
+
+                # reference: https://en.wikipedia.org/wiki/Elastic_collision#Two-dimensional_collision_with_two_moving_objects
+                v1_new = v1 - (np.dot(v1 - v2, p1 - p2) / np.linalg.norm(p1 - p2) ** 2) * (p1 - p2)
+                v2_new = v2 - (np.dot(v2 - v1, p2 - p1) / np.linalg.norm(p2 - p1) ** 2) * (p2 - p1)
+
+                # update velocities
+                self.ptcl_v[i, :] = torch.tensor(v1_new).to(device)
+                self.ptcl_v[collide_id, :] = torch.tensor(v2_new).to(device)
+
+                # if particles are too close, move them apart
+                if np.linalg.norm(p1 - p2) < 2 * self.ptcl_radius:
+                    center = (p1 + p2) / 2
+                    n = (p1 - p2) / np.linalg.norm(p1 - p2)
+                    p1_new = center + self.ptcl_radius * n
+                    p2_new = center - self.ptcl_radius * n
+                    self.ptcl_pos[i, :] = torch.tensor(p1_new).to(device)
+                    self.ptcl_pos[collide_id, :] = torch.tensor(p2_new).to(device)
+            
+            # particle-wall collisions
+            for wall in self.walls:
+                # compute normal and direction vector of the wall
+                p1, p2 = wall[0], wall[1]
+                x1, y1 = float(p1[0]), float(p1[1])
+                x2, y2 = float(p2[0]), float(p2[1])
+
+                v_dir = np.array([x2 - x1, y2 - y1])
+
+                n = np.array([y1 - y2, x2 - x1], dtype=float)
+                n /= np.linalg.norm(n)
+
+                # compute line equation coefficients (A * x + B * y + C = 0)
+                A = y2 - y1
+                B = x1 - x2
+                C = x2 * y1 - x1 * y2
+
+                # compute distances to the wall
+                dis = (A * self.ptcl_pos[:, 0] + B * self.ptcl_pos[:, 1] + C) / np.sqrt(A**2 + B**2)
+                
+                # check if particles move toward the wall
+                def cross(v_dir, batched_v):
+                    return v_dir[0] * batched_v[:, 1] - v_dir[1] * batched_v[:, 0]
+                direction_judge = cross(v_dir, self.ptcl_pos - torch.tensor([x1, y1]).to(device).unsqueeze(0)) * \
+                    cross(v_dir, self.ptcl_v)
+                moving_toward_line = direction_judge < 0
+
+                # check if particles collide with the wall
+                collide_with_line  = torch.abs(dis) <= self.ptcl_radius
+
+                # check if particles collide within the segment
+                collide_in_segment = torch.logical_and(
+                    torch.logical_and(self.ptcl_pos[:, 0] >= min(x1, x2), self.ptcl_pos[:, 0] <= max(x1, x2)),
+                    torch.logical_and(self.ptcl_pos[:, 1] >= min(y1, y2), self.ptcl_pos[:, 1] <= max(y1, y2))
+                )
+
+                collide_ids = torch.logical_and(
+                    moving_toward_line,
+                    torch.logical_and(
+                        collide_with_line,
+                        collide_in_segment
+                    )
+                )
+
+                if not torch.any(collide_id):
+                    # no collision for this wall
+                    continue
+                
+                # handle collisions
+                n_tensor = torch.tensor(n).unsqueeze(0).to(device)
+                v_tensor = torch.tensor(self.ptcl_v[collide_ids, :]).to(device)
+                v_new = v_tensor - 2 * torch.sum(v_tensor * n_tensor, dim=1).unsqueeze(1) * n_tensor
+
+                self.ptcl_v[collide_ids, :] = v_new.type(torch.float32)
+                
+        
         pbar.close()
