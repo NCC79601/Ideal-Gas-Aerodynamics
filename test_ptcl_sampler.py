@@ -1,7 +1,29 @@
+import json
+import numpy as np
+import matplotlib.pyplot as plt
 from utils.ptcl_sampler import ptcl_sampler
 
-ptcl_pos, ptcl_v = ptcl_sampler(10, [100, 100], 300, 28)
+with open('./config/config.json', 'r') as f:
+    config = json.load(f)
 
-print(f'ptcl_pos: {ptcl_pos}')
+T0 = config['T0']
+ptcl_relative_mass = config['ptcl_relative_mass']
 
-print(f'ptcl_v: {ptcl_v}')
+ptcl_pos, ptcl_v = ptcl_sampler(
+    ptcl_count    = 1000,
+    map_size      = [100, 100],
+    temperature   = T0,
+    relative_mass = ptcl_relative_mass,
+    max_velocity  = np.inf,
+    flow_velocity = 0
+)
+
+# Calculate the magnitude of ptcl_v
+ptcl_v_mag = np.linalg.norm(ptcl_v, axis=1)
+
+# Plot the histogram
+plt.hist(ptcl_v_mag, bins=20)
+plt.xlabel('Magnitude of ptcl_v')
+plt.ylabel('Frequency')
+plt.title('Histogram of ptcl_v Magnitude')
+plt.show()
