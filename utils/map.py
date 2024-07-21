@@ -218,7 +218,7 @@ class Map:
                 C = x2 * y1 - x1 * y2
 
                 # compute distances to the wall
-                dis = (A * self.ptcl_pos[:, 0] + B * self.ptcl_pos[:, 1] + C) / np.sqrt(A**2 + B**2)
+                dis = torch.abs(A * self.ptcl_pos[:, 0] + B * self.ptcl_pos[:, 1] + C) / np.sqrt(A**2 + B**2)
                 
                 # check if particles move toward the wall
                 def cross(v_dir, batched_v):
@@ -228,13 +228,13 @@ class Map:
                 moving_toward_line = direction_judge < 0
 
                 # check if particles collide with the wall
-                collide_with_line  = torch.abs(dis) <= self.ptcl_radius
+                collide_with_line  = dis <= self.ptcl_radius
 
                 # check if particles collide within the segment
-                collide_in_segment = torch.logical_and(
-                    torch.logical_and(self.ptcl_pos[:, 0] >= min(x1, x2), self.ptcl_pos[:, 0] <= max(x1, x2)),
-                    torch.logical_and(self.ptcl_pos[:, 1] >= min(y1, y2), self.ptcl_pos[:, 1] <= max(y1, y2))
-                )
+                v1 = torch.tensor([x1, y1]).to(device).unsqueeze(0) - self.ptcl_pos
+                v2 = torch.tensor([x2, y2]).to(device).unsqueeze(0) - self.ptcl_pos
+                dot_product = torch.sum(v1 * v2, dim=1)
+                collide_in_segment = dot_product <= 0
 
                 collide_ids = torch.logical_and(
                     moving_toward_line,
@@ -250,7 +250,7 @@ class Map:
                 
                 # handle collisions
                 n_tensor = torch.tensor(n).unsqueeze(0).to(device)
-                v_tensor = torch.tensor(self.ptcl_v[collide_ids, :]).to(device)
+                v_tensor = self.ptcl_v[collide_ids, :]
                 v_new = v_tensor - 2 * torch.sum(v_tensor * n_tensor, dim=1).unsqueeze(1) * n_tensor
 
                 self.ptcl_v[collide_ids, :] = v_new.type(torch.float32)
