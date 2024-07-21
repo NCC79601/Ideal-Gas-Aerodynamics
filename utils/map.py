@@ -9,11 +9,6 @@ try:
 except ImportError:
     from ptcl_sampler import ptcl_sampler, ptcl_new_sampler
 
-try:
-    from .collide import is_collide_ptcl_ptcl, is_collide_ptcl_wall, collide_particle_particle, collide_particle_wall
-except ImportError:
-    from collide import is_collide_ptcl_ptcl, is_collide_ptcl_wall, collide_particle_particle, collide_particle_wall
-
 # use cuda to accelerate simulation if available
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
