@@ -49,6 +49,9 @@ def ptcl_sampler(
     sampled_v_y = sampled_v * np.sin(sampled_angle)
     ptcl_v = np.array([sampled_v_x, sampled_v_y]).T
 
+    v_thermal_mean = np.sqrt(2 * np.pi * k * temperature / mass)
+    print(f'mean thermal velocity: {v_thermal_mean}')
+
     return ptcl_pos, ptcl_v
 
 
@@ -56,7 +59,7 @@ def ptcl_new_sampler(
     ptcl_count: int,
     ptcl_gen_area_size: Union[list, tuple],
     temperature: float,
-    mass: float,
+    relative_mass: float,
     max_velocity: float,
     flow_velocity: float = 0.0
 ) -> tuple:
@@ -67,15 +70,22 @@ def ptcl_new_sampler(
     - ptcl_count: number of particles to sample
     - ptcl_gen_area_size: size of the area to generate particles [w, h]
     - temperature: temperature of the system
-    - mass: mass of the particles
+    - relative_mass: relative mass of the particles
     - max_velocity: maximum thermal velocity of the particles
     - flow_velocity: velocity of the flow
 
     Returns:
     - `ptcl_new_pos, ptcl_new_v, t_to_enter`: sampled positions and velocities, and time for each particle to enter the map
     '''
-    ptcl_new_pos, ptcl_new_v = ptcl_sampler(ptcl_count, ptcl_gen_area_size, temperature, mass, max_velocity, flow_velocity)
-    ptcl_new_pos -= ptcl_gen_area_size[0]
+    ptcl_new_pos, ptcl_new_v = ptcl_sampler(
+        ptcl_count,
+        ptcl_gen_area_size,
+        temperature,
+        relative_mass,
+        max_velocity,
+        flow_velocity
+    )
+    ptcl_new_pos[:, 0] -= ptcl_gen_area_size[0]
     t_to_enter = np.abs(ptcl_new_pos[:, 0]) / flow_velocity
 
     # sort particles by time to enter
