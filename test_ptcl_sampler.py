@@ -21,6 +21,9 @@ ptcl_pos, ptcl_v = ptcl_sampler(
 # Calculate the magnitude of ptcl_v
 ptcl_v_mag = np.linalg.norm(ptcl_v, axis=1)
 
+sample_mean = np.mean(ptcl_v_mag)
+print(f'Sample mean velocity: {sample_mean}')
+
 # Plot the histogram
 plt.hist(ptcl_v_mag, bins=20)
 plt.xlabel('Magnitude of ptcl_v')
