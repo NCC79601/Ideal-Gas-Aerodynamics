@@ -45,9 +45,9 @@ class Map:
         self.ptcl_gen_y_range   = config['ptcl_gen_y_range'] # particle generation y range [y_min, y_max]
         self.walls              = config['walls'] # walls in the map [[[x1, y1], [x2, y2], thickness], ...]
         # simulation time properties
-        self.t_lim   = config['t_lim'] # simulation time limit
-        self.t_scale = config['t_scale'] # time between frames (default 1/60 s)
-        self.dt      = config['dt'] # time step
+        self.t_lim         = config['t_lim'] # simulation time limit
+        self.save_interval = config['save_interval'] # save time between keyframes (default 1/60 s)
+        self.dt            = config['dt'] # time step
 
         # initialize current simulation time
         self.t = 0
@@ -125,7 +125,7 @@ class Map:
         pbar = tqdm(total=self.t_lim)
         while self.t < self.t_lim:
             # record keyframes
-            if self.t - self.keyframes[-1]['t'] >= self.t_scale:
+            if self.t - self.keyframes[-1]['t'] >= self.save_interval:
                 self.keyframes.append({
                     "t": self.t,
                     "ptcl_pos": self.ptcl_pos.cpu().numpy(),
