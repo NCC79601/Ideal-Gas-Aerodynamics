@@ -22,7 +22,7 @@ def get_output_folder_name(map: Map) -> str:
     v0              = map.v0
     relative_mass   = map.ptcl_relative_mass
 
-    output_folder_path = f'sim_{t_lim}_T0_{T0}_v0_{v0}_dsty_{spatial_density}_rltmass_{relative_mass:.2e}'
+    output_folder_path = f'sim_t_{t_lim}_T0_{T0}_v0_{v0}_dsty_{spatial_density}_rltmass_{relative_mass:.2e}'
     return output_folder_path
 
 
