@@ -2,45 +2,52 @@ from PIL import Image, ImageDraw
 from tqdm import tqdm
 import os
 import subprocess
+import json
 from utils.map import Map
+from typing import Union
 try:
     from .result_saver import get_output_folder_name
 except ImportError:
     from result_saver import get_output_folder_name
 
-def make_video(map: Map, output_folder='./saves', temp_folder='./temp_frames'):
-    keyframes   = map.keyframes
-    width       = map.width
-    height      = map.height
-    walls       = map.walls
-    ptcl_radius = map.ptcl_radius
+def make_video(map_or_keyframes: Union[Map, list], output_folder='./saves', temp_folder='./temp_frames', config_file='./config/config.json') -> None:
+    with open(config_file, 'r') as f:
+        config = json.load(f)
+    width       = config['map_size'][0]
+    height      = config['map_size'][1]
+    walls       = config['walls']
+    ptcl_radius = config['ptcl_radius']
+    video_fps   = config['video_fps']
+
+    if isinstance(map_or_keyframes, Map):
+        map = map_or_keyframes
+        keyframes = map.keyframes
+    else:
+        keyframes = map_or_keyframes
 
     # check whether the temp folder exists
     if not os.path.exists(temp_folder):
         os.makedirs(temp_folder)
-    
-    # get all time points
-    times = [kf['t'] for kf in keyframes]
-    min_time, max_time = min(times), max(times)
-    fps = 24  # 设置帧率
-    duration = max_time - min_time
-    total_frames = int(duration * fps) + 1
 
     print('Generating video frames...')
+    print(f'Total frames number: {len(keyframes)}')
 
-    for frame_idx in tqdm(range(total_frames)):
-        t = min_time + frame_idx / fps
-        closest_keyframe = min(keyframes, key=lambda kf: abs(kf['t'] - t))
+    for frame_idx, keyframe in tqdm(enumerate(keyframes)):
         
         # create a new image
         img = Image.new('RGB', (width, height), 'white')
         draw = ImageDraw.Draw(img)
         
         # draw all particles
-        for i, pos in enumerate(closest_keyframe['ptcl_pos']):
+        for i, pos in enumerate(keyframe['ptcl_pos']):
             left_up = (pos[0] - ptcl_radius, pos[1] - ptcl_radius)
             right_down = (pos[0] + ptcl_radius, pos[1] + ptcl_radius)
             draw.ellipse([left_up, right_down], fill='black')
+
+        # draw ignore area
+        ignore_area_polygon = config['ignore_area_polygon']
+        polygon_for_draw = [(x, y) for x,y in ignore_area_polygon]
+        draw.polygon(polygon_for_draw, fill='white')
         
         # draw all walls
         for wall in walls:
@@ -54,8 +61,11 @@ def make_video(map: Map, output_folder='./saves', temp_folder='./temp_frames'):
         img.save(frame_filename)
     
     # 使用ffmpeg合并图像为视频
-    output_file_path = os.path.join(os.path.join(output_folder, get_output_folder_name(map)), 'output.mp4')
-    ffmpeg_cmd = f'ffmpeg -r {fps} -i {temp_folder}/frame_%04d.png -vcodec libx264 -crf 25 -pix_fmt yuv420p {output_file_path}'
+    if isinstance(map_or_keyframes, Map):
+        output_file_path = os.path.join(os.path.join(output_folder, get_output_folder_name(map)), 'output.mp4')
+    else:
+        output_file_path = os.path.join(os.path.join(output_folder, 'test'), 'output.mp4')
+    ffmpeg_cmd = f'ffmpeg -r {video_fps} -i {temp_folder}/frame_%04d.png -vcodec libx264 -crf 25 -pix_fmt yuv420p {output_file_path}'
     subprocess.run(ffmpeg_cmd, shell=True)
     
     # 清理临时文件
