@@ -94,6 +94,7 @@ class Map:
         self.ptcl_pos = torch.tensor(keyframe['ptcl_pos'], dtype=torch.float32, device=device)
         self.ptcl_v   = torch.tensor(keyframe['ptcl_v'], dtype=torch.float32, device=device)
         self.t_lim    = self.t_lim + keyframe['t'] # extend simulation time
+        self._refresh_ptcl_gen_area() # refresh particle generation area
 
     def _update_positions(self, elapsed_time: float) -> None:
         '''
