@@ -43,7 +43,7 @@ class Map:
         self.width, self.height = self.map_size[0], self.map_size[1]
         self.ptcl_gen_area_size = config['ptcl_gen_area_size'] # particle generation area size [w, h]
         self.ptcl_gen_y_range   = config['ptcl_gen_y_range'] # particle generation y range [y_min, y_max]
-        self.walls              = config['walls'] # walls in the map [[[x1, y1], [x2, y2]], ...]
+        self.walls              = config['walls'] # walls in the map [[[x1, y1], [x2, y2], thickness], ...]
         # simulation time properties
         self.t_lim   = config['t_lim'] # simulation time limit
         self.t_scale = config['t_scale'] # time between frames (default 1/60 s)
@@ -204,6 +204,7 @@ class Map:
             for wall in self.walls:
                 # compute normal and direction vector of the wall
                 p1, p2 = wall[0], wall[1]
+                thickness = wall[2]
                 x1, y1 = float(p1[0]), float(p1[1])
                 x2, y2 = float(p2[0]), float(p2[1])
 
@@ -228,7 +229,7 @@ class Map:
                 moving_toward_line = direction_judge < 0
 
                 # check if particles collide with the wall
-                collide_with_line  = dis <= self.ptcl_radius
+                collide_with_line  = dis <= (self.ptcl_radius + thickness / 2)
 
                 # check if particles collide within the segment
                 v1 = torch.tensor([x1, y1]).to(device).unsqueeze(0) - self.ptcl_pos
