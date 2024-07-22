@@ -1,22 +1,22 @@
 {
-    "ptcl_radius": 3,
-    "ptcl_relative_mass": 29,
+    "ptcl_radius": 1.5,
+    "ptcl_relative_mass": 28.8,
 
-    "T0": 300,
-    "v0": 500,
-    "v_max": 2000,
-    "spatial_density": 0.002,
+    "T0": 298.15,
+    "v0": 1000,
+    "v_thermal_max": 2000,
+    "spatial_density": 0.01,
 
     "map_size": [900, 600],
     "ptcl_gen_area_size": [900, 600],
-    "ptcl_gen_y_range": [200, 600],
+    "ptcl_gen_y_range":   [200, 600],
     "walls": [
-        [[0, 200], [500, 200]],
-        [[500, 200], [900, 400]],
-        [[0, 550], [900, 550]]
+        [[-900, 200], [500, 200]],
+        [[ 500, 200], [900, 400]],
+        [[-900, 600], [500, 600]]
     ],
 
-    "t_lim": 8,
-    "t_scale": 0.01667,
+    "t_lim": 5,
+    "t_scale": 0.005,
     "dt": 0.001
 }

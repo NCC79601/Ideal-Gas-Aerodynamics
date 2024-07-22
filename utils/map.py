@@ -36,7 +36,7 @@ class Map:
         # thermal properties
         self.T0              = config['T0'] # static temperature
         self.v0              = config['v0'] # flowing velocity
-        self.v_max           = config['v_max'] # maximum velocity
+        self.v_thermal_max   = config['v_thermal_max'] # maximum thermal velocity
         self.spatial_density = config['spatial_density'] # spatial density (number of particles per unit area)
         # spatial geometric properties
         self.map_size           = config['map_size'] # map size [w, h]
@@ -60,7 +60,7 @@ class Map:
             ptcl_count    = self.ptcl_count,
             map_size = [self.map_size[0], self.ptcl_gen_y_range[1] - self.ptcl_gen_y_range[0]],
             temperature   = self.T0,
-            max_velocity  = self.v_max,
+            max_velocity  = self.v_thermal_max,
             relative_mass = self.ptcl_relative_mass,
             flow_velocity = self.v0
         )
@@ -101,7 +101,7 @@ class Map:
             ptcl_gen_area_size = [self.ptcl_gen_area_size[0], self.ptcl_gen_y_range[1] - self.ptcl_gen_y_range[0]],
             temperature   = self.T0,
             relative_mass = self.ptcl_relative_mass,
-            max_velocity  = self.v_max,
+            max_velocity  = self.v_thermal_max,
             flow_velocity = self.v0
         )
         self.ptcl_new_pos = torch.tensor(self.ptcl_new_pos, dtype=torch.float32, device=device)
