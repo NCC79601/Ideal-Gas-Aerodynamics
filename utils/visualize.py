@@ -1,24 +1,30 @@
-from moviepy.editor import ImageSequenceClip
-import numpy as np
-import matplotlib.pyplot as plt
+from PIL import Image, ImageDraw
 from tqdm import tqdm
+import os
+import subprocess
+from utils.map import Map
+try:
+    from .result_saver import get_output_folder_name
+except ImportError:
+    from result_saver import get_output_folder_name
 
-def make_video(keyframes, width, height, ptcl_radius, output_filename='output.mp4'):
-    # Set the size of the canvas
-    fig, ax = plt.subplots(figsize=(width / 100, height / 100), dpi=100)
-    ax.set_xlim(0, width)
-    ax.set_ylim(0, height)
-    ax.set_aspect('equal')
+def make_video(map: Map, output_folder='./saves', temp_folder='./temp_frames'):
+    keyframes   = map.keyframes
+    width       = map.width
+    height      = map.height
+    walls       = map.walls
+    ptcl_radius = map.ptcl_radius
+
+    # check whether the temp folder exists
+    if not os.path.exists(temp_folder):
+        os.makedirs(temp_folder)
     
-    # Get all the time points
+    # get all time points
     times = [kf['t'] for kf in keyframes]
     min_time, max_time = min(times), max(times)
-    fps = 60  # Set the frame rate
+    fps = 24  # 设置帧率
     duration = max_time - min_time
     total_frames = int(duration * fps) + 1
-
-    # Create a list of frames
-    frames = []
 
     print('Generating video frames...')
 
@@ -26,26 +32,38 @@ def make_video(keyframes, width, height, ptcl_radius, output_filename='output.mp
         t = min_time + frame_idx / fps
         closest_keyframe = min(keyframes, key=lambda kf: abs(kf['t'] - t))
         
-        ax.clear()
-        ax.set_xlim(0, width)
-        ax.set_ylim(0, height)
+        # create a new image
+        img = Image.new('RGB', (width, height), 'white')
+        draw = ImageDraw.Draw(img)
         
-        for pos in closest_keyframe['ptcl_pos']:
-            circle = plt.Circle(pos, ptcl_radius, color='black')
-            ax.add_patch(circle)
+        # draw all particles
+        for i, pos in enumerate(closest_keyframe['ptcl_pos']):
+            left_up = (pos[0] - ptcl_radius, pos[1] - ptcl_radius)
+            right_down = (pos[0] + ptcl_radius, pos[1] + ptcl_radius)
+            draw.ellipse([left_up, right_down], fill='black')
         
-        fig.canvas.draw()
+        # draw all walls
+        for wall in walls:
+            draw.line([*wall[0], *wall[1]], fill='black', width=wall[2])
         
-        # Add the current frame to the list of frames
-        image = np.frombuffer(fig.canvas.tostring_rgb(), dtype='uint8')
-        image = image.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-        frames.append(image)
-
-    plt.close(fig)
+        # invert y axis
+        img = img.transpose(Image.FLIP_TOP_BOTTOM)
+        
+        # save drawn keyframe images
+        frame_filename = os.path.join(temp_folder, f'frame_{frame_idx:04d}.png')
+        img.save(frame_filename)
     
-    # Use moviepy to combine the list of frames into a video
-    clip = ImageSequenceClip(frames, fps=fps)
-    clip.write_videofile(output_filename, codec='libx264')
+    # 使用ffmpeg合并图像为视频
+    output_file_path = os.path.join(os.path.join(output_folder, get_output_folder_name(map)), 'output.mp4')
+    ffmpeg_cmd = f'ffmpeg -r {fps} -i {temp_folder}/frame_%04d.png -vcodec libx264 -crf 25 -pix_fmt yuv420p {output_file_path}'
+    subprocess.run(ffmpeg_cmd, shell=True)
+    
+    # 清理临时文件
+    for file_name in os.listdir(temp_folder):
+        os.remove(os.path.join(temp_folder, file_name))
+    os.rmdir(temp_folder)
+
+    print(f'Video saved at {output_file_path}')
 
 
 if __name__ == '__main__':
