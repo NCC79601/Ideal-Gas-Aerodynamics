@@ -83,6 +83,18 @@ class Map:
 
         print('Map initialization complete.')
 
+    def load_keyframe(self, keyframe: dict) -> None:
+        '''
+        Load map state (positions and velocities of particles only) from a keyframe
+
+        Parameters:
+        - keyframe: keyframe to load
+        '''
+        self.t        = keyframe['t']
+        self.ptcl_pos = torch.tensor(keyframe['ptcl_pos'], dtype=torch.float32, device=device)
+        self.ptcl_v   = torch.tensor(keyframe['ptcl_v'], dtype=torch.float32, device=device)
+        self.t_lim    = self.t_lim + keyframe['t'] # extend simulation time
+
     def _update_positions(self, elapsed_time: float) -> None:
         '''
         Update particle positions and delete outbounded particles
