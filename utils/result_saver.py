@@ -43,7 +43,14 @@ def save_result(map: Map, output_folder: str = './saves') -> None:
     if not os.path.exists(keyframes_dir):
         os.makedirs(keyframes_dir)
     
-    keyframes_file = os.path.join(keyframes_dir, 'keyframes.pkl')
+    # check whether there exits any .pkl file, if not, start numbering from 0
+    file_index = 0
+    while True:
+        keyframes_file = os.path.join(keyframes_dir, f'keyframes_{file_index:02d}.pkl')
+        if not os.path.exists(keyframes_file):
+            break
+        file_index += 1
+
     with open(keyframes_file, 'wb') as f:
         pickle.dump(keyframes, f)
     print(f'Saved keyframes to {keyframes_file}')

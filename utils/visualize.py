@@ -62,9 +62,20 @@ def make_video(map_or_keyframes: Union[Map, list], output_folder='./saves', temp
     
     # 使用ffmpeg合并图像为视频
     if isinstance(map_or_keyframes, Map):
-        output_file_path = os.path.join(os.path.join(output_folder, get_output_folder_name(map)), 'output.mp4')
+        output_file_dir = os.path.join(output_folder, get_output_folder_name(map))
+        
     else:
-        output_file_path = os.path.join(os.path.join(output_folder, 'test'), 'output.mp4')
+        output_file_dir = os.path.join(output_folder, 'test')
+    
+    # check whether there exits any .mp4 file, if not, start numbering from 0
+    file_index = 0
+    while True:
+        output_file_path = os.path.join(output_file_dir, f'output_{file_index:02d}.mp4')
+        if not os.path.exists(output_file_path):
+            break
+        file_index += 1
+    output_file_path = os.path.join(output_file_dir, f'output_{file_index:02d}.mp4')
+
     ffmpeg_cmd = f'ffmpeg -r {video_fps} -i {temp_folder}/frame_%04d.png -vcodec libx264 -crf 25 -pix_fmt yuv420p {output_file_path}'
     subprocess.run(ffmpeg_cmd, shell=True)
     
