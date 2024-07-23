@@ -22,7 +22,12 @@ ptcl_pos, ptcl_v = ptcl_sampler(
 ptcl_v_mag = np.linalg.norm(ptcl_v, axis=1)
 
 sample_mean = np.mean(ptcl_v_mag)
+sample_rms = np.sqrt(np.mean(ptcl_v_mag**2))
+speed_of_sound = sample_rms * np.sqrt(1.4 / 3)
+
 print(f'Sample mean velocity: {sample_mean}')
+print(f'Sample rms  velocity: {sample_rms}')
+print(f'Approximated speed of sound: {speed_of_sound}')
 
 # Plot the histogram
 plt.hist(ptcl_v_mag, bins=20)
