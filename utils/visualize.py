@@ -66,7 +66,9 @@ def make_video(map_or_keyframes: Union[Map, list], output_folder='./saves', temp
         
     else:
         output_file_dir = os.path.join(output_folder, 'test')
-    
+    if not os.path.exists(output_file_dir):
+        os.makedirs(output_file_dir)
+
     # check whether there exits any .mp4 file, if not, start numbering from 0
     file_index = 0
     while True:
