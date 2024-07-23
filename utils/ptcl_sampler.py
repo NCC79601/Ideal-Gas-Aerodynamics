@@ -14,6 +14,8 @@ Ru         = constants['Ru'] # universal gas constant
 m_1_12_C12 = constants['m_1_12_C12'] # mass of 1/12 of C12
 
 
+# Maxwell-Boltzmann distribution function
+# reference: https://ballen95.pythonanywhere.com/Week2-Notebook/
 def maxwell_boltzmann_dist(v: float, temperature: float, molar_mass: float) -> float:
     '''
     Maxwell-Boltzmann distribution function
@@ -61,7 +63,7 @@ def sample_maxwell_boltzmann_dist(temperature: float, molar_mass: float, sample_
     f_max = maxwell_boltzmann_dist_torch(torch.tensor(v_max, device=device), temperature, molar_mass)
     
     samples = []
-    
+
     while len(samples) < sample_count:
         v = torch.rand(sample_batch_size, device=device) * 5 * v_max  # Generate candidate velocities
         f_v = maxwell_boltzmann_dist_torch(v, temperature, molar_mass)  # Calculate the PDF value at this velocity
