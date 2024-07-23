@@ -3,14 +3,19 @@ import torch
 import json
 import os
 from tqdm import tqdm
+from colorama import Fore, Back
 
 try:
     from .ptcl_sampler import ptcl_sampler, ptcl_new_sampler
 except ImportError:
     from ptcl_sampler import ptcl_sampler, ptcl_new_sampler
 
+cuda_available = torch.cuda.is_available()
+
 # use cuda to accelerate simulation if available
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+device = 'cuda' if cuda_available else 'cpu'
+if cuda_available:
+    print(f"{Back.GREEN+Fore.BLACK} CUDA available {Back.RESET+Fore.RESET}")
 
 class Map:
     '''
