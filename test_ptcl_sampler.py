@@ -23,6 +23,7 @@ ptcl_v_mag = np.linalg.norm(ptcl_v, axis=1)
 
 sample_mean    = np.mean(ptcl_v_mag)
 sample_rms     = np.sqrt(np.mean(ptcl_v_mag**2))
+# HACK: 2D-atom is different from 3D-air
 speed_of_sound = sample_rms * np.sqrt(1.4 / 3)
 
 print(f'Sample mean velocity: {sample_mean}')

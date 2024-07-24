@@ -16,6 +16,7 @@ m_1_12_C12 = constants['m_1_12_C12'] # mass of 1/12 of C12
 
 # Maxwell-Boltzmann distribution function
 # reference: https://ballen95.pythonanywhere.com/Week2-Notebook/
+# HACK: 2-D distribution is diffferent from 3-D
 def maxwell_boltzmann_dist(v: float, temperature: float, molar_mass: float) -> float:
     '''
     Maxwell-Boltzmann distribution function
